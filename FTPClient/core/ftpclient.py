@@ -126,14 +126,22 @@ class FtpClient(object):
         self.client.send(head_bytes)
 
         sign = self.client.recv(BUFFER)
+
+        send_size = 0
         if sign.decode("utf-8") == str(0):
             print("file is exist!")
             return
 
+        progress = self.print_progress(file_size)
+        progress.__next__()
         with open(attr, 'rb') as f:
             for line in f:
                 self.client.send(line)
-            print("upload success!")
+                send_size += len(line)
+                try:
+                    progress.send(len(line))
+                except StopIteration as e:
+                    print("[100%]")
 
     def get(self, attr):
         """
@@ -161,13 +169,27 @@ class FtpClient(object):
         head_dict = json.loads(head_json)
         file_size = head_dict["file_size"]
         rec_size = 0
-
+        progress = self.print_progress(file_size)
+        progress.__next__()
         with open(attr, "wb") as f:
             while rec_size < file_size:
                 res = self.client.recv(BUFFER)
                 f.write(res)
                 rec_size += len(res)
-            print("download success!")
+                try:
+                    progress.send(len(res))
+                except StopIteration as e:
+                    print("[100%]")
+
+    def print_progress(self, total):
+        received_size = 0
+        current_percent = 0
+        while received_size < total:
+            new_size = yield
+            if int((received_size / total) * 100) > current_percent:
+                print("#", end="", flush=True)
+                current_percent = int((received_size / total) * 100)
+            received_size += new_size
 
 
 def run():
